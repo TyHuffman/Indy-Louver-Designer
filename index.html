@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Indianapolis Louver Shadow Designer</title>
+    <!-- Tailwind CSS for clean, rapid layout styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between font-sans">
+
+    <!-- Header -->
+    <header class="bg-slate-800 border-b border-slate-700 p-6 text-center shadow-md">
+        <h1 class="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
+            Indy Solar Louver Designer
+        </h1>
+        <p class="text-slate-400 mt-2 text-sm sm:text-base">
+            Optimize 12-inch slats mounted 10 feet high for Indianapolis solar angles (39.77° N)
+        </p>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="flex-grow max-w-6xl w-full mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+        
+        <!-- Sidebar Controls Container -->
+        <div class="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-xl space-y-6 lg:col-span-1">
+            <h2 class="text-xl font-bold text-slate-200 border-b border-slate-700 pb-2">Configuration</h2>
+            
+            <!-- Season Selection -->
+            <div>
+                <label class="block text-sm font-medium text-slate-400 mb-2">Target Season (Midday Sun Angle)</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="summerBtn" class="py-2 px-3 rounded-lg text-sm font-semibold border transition-all duration-200 bg-amber-500/20 border-amber-500 text-amber-300 shadow-lg shadow-amber-500/10">
+                        Summer Solstice (73.7°)
+                    </button>
+                    <button id="winterBtn" class="py-2 px-3 rounded-lg text-sm font-semibold border transition-all duration-200 bg-slate-700 border-slate-600 text-slate-400 hover:text-slate-200">
+                        Winter Solstice (26.8°)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Slat Angle Input -->
+            <div>
+                <div class="flex justify-between text-sm font-medium mb-1">
+                    <label class="text-slate-400">Slat Tilt Angle (Facing South)</label>
+                    <span id="angleVal" class="text-amber-400 font-mono font-bold">27°</span>
+                </div>
+                <input type="range" id="angleSlider" min="0" max="60" value="27" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
+                <p class="text-xs text-slate-500 mt-1">27° matches the winter sun perfectly for maximum light transmission.</p>
+            </div>
+
+            <!-- Slat Spacing Input -->
+            <div>
+                <div class="flex justify-between text-sm font-medium mb-1">
+                    <label class="text-slate-400">On-Center Spacing</label>
+                    <span id="spacingVal" class="text-amber-400 font-mono font-bold">9.1 in</span>
+                </div>
+                <input type="range" id="spacingSlider" min="50" max="150" value="91" step="1" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
+                <p class="text-xs text-slate-500 mt-1">9.1 inches guarantees 100% shade coverage during peak summer noon.</p>
+            </div>
+
+            <!-- Metrics Panel Output -->
+            <div class="bg-slate-900/60 border border-slate-700/50 rounded-lg p-4 space-y-3">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500">Performance Metrics</h3>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-slate-400">Midday Shade Coverage:</span>
+                    <span id="shadePct" class="font-bold text-emerald-400 font-mono text-base">100%</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-slate-400">Winter Gap Clearance:</span>
+                    <span id="winterEff" class="font-bold text-sky-400 font-mono text-base">98%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dynamic Visualization Canvas -->
+        <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-xl lg:col-span-2 flex flex-col items-center">
+            <div class="w-full flex justify-between items-center mb-2 px-2 text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                <span>Side View Facing East (Left is South)</span>
+                <span id="activeAngleDisplay" class="text-amber-500 font-mono">Sun Angle: 73.7°</span>
+            </div>
+            <div class="relative w-full aspect-[4/3] bg-slate-950 rounded-lg border border-slate-900 overflow-hidden shadow-inner">
+                <canvas id="simCanvas" class="absolute top-0 left-0 w-full h-full"></canvas>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-800/40 border-t border-slate-800 text-center py-4 text-xs text-slate-500">
+        Designed for custom architectural fabrication in Central Indiana.
+    </footer>
+
+    <!-- Logic Engine -->
+    <script>
+        // DOM Elements
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const summerBtn = document.getElementById('summerBtn');
+        const winterBtn = document.getElementById('winterBtn');
+        const angleSlider = document.getElementById('angleSlider');
+        const angleVal = document.getElementById('angleVal');
+        const spacingSlider = document.getElementById('spacingSlider');
+        const spacingVal = document.getElementById('spacingVal');
+        const shadePct = document.getElementById('shadePct');
+        const winterEff = document.getElementById('winterEff');
+        const activeAngleDisplay = document.getElementById('activeAngleDisplay');
+
+        // Application State Configurations
+        let activeSunAngle = 73.67; // Summer default solar noon altitude
+        const latIndy = 39.77;
+        const slatWidth = 12; // Inches
+        const roofHeight = 120; // 10 feet in inches
+
+        // Track Slider Values
+        let currentSlatAngle = parseFloat(angleSlider.value); // Deg
+        let currentSlatSpacing = parseFloat(spacingSlider.value) / 10; // Back to decimal inches
+
+        // Event Listeners for Season Buttons
+        summerBtn.addEventListener('click', () => {
+            activeSunAngle = 90 - latIndy + 23.44;
+            setSeasonUi(summerBtn, winterBtn, "Summer Solstice (73.7°)");
+        });
+
+        winterBtn.addEventListener('click', () => {
+            activeSunAngle = 90 - latIndy - 23.44;
+            setSeasonUi(winterBtn, summerBtn, "Winter Solstice (26.8°)");
+        });
+
+        function setSeasonUi(active, inactive, text) {
+            active.className = "py-2 px-3 rounded-lg text-sm font-semibold border transition-all duration-200 bg-amber-500/20 border-amber-500 text-amber-300 shadow-lg shadow-amber-500/10";
+            inactive.className = "py-2 px-3 rounded-lg text-sm font-semibold border transition-all duration-200 bg-slate-700 border-slate-600 text-slate-400 hover:text-slate-200";
+            activeAngleDisplay.innerText = `Sun Angle: ${activeSunAngle.toFixed(1)}°`;
+            drawSimulation();
+        }
+
+        // Event Listeners for Sliders
+        angleSlider.addEventListener('input', (e) => {
+            currentSlatAngle = parseFloat(e.target.value);
+            angleVal.innerText = `${currentSlatAngle}°`;
+            drawSimulation();
+        });
+
+        spacingSlider.addEventListener('input', (e) => {
+            currentSlatSpacing = parseFloat(e.target.value) / 10;
+            spacingVal.innerText = `${currentSlatSpacing.toFixed(1)} in`;
+            drawSimulation();
+        });
+
+        // Resize management
+        function resizeCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * window.devicePixelRatio;
+            canvas.height = rect.height * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            drawSimulation();
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        // Core Rendering and Geometric Engine
+        function drawSimulation() {
+            const w = canvas.width / window.devicePixelRatio;
+            const h = canvas.height / window.devicePixelRatio;
+            if (w === 0 || h === 0) return;
+
+            // Clear Scene
+            ctx.clearRect(0, 0, w, h);
+
+            // Establish coordinate frameworks mapping inches to pixels
+            const padLeft = w * 0.15;
+            const padTop = h * 0.2;
+            const drawWidth = w * 0.7;
+            const drawHeight = h * 0.65;
+            
+            // Pixels per inch calculation
+            const ppi = drawHeight / roofHeight; 
+
+            const yGround = padTop + drawHeight;
+            const yRoof = padTop;
+
+            // Calculate Static Math Indicators
+            const sunRad = activeSunAngle * (Math.PI / 180);
+            const tiltRad = currentSlatAngle * (Math.PI / 180);
+
+            // 1. Calculate Theoretical Shade Percentage (Summer) & Gap Opening (Winter)
+            const radSummer = (73.67) * (Math.PI / 180);
+            const expectedSummerGap = currentSlatSpacing * Math.sin(radSummer) - (slatWidth * Math.sin(radSummer - tiltRad));
+            let calculatedShade = 100;
+            if (expectedSummerGap > 0) {
+                calculatedShade = Math.max(0, 100 - (expectedSummerGap / (currentSlatSpacing * Math.sin(radSummer)) * 100));
+            }
+            shadePct.innerText = `${Math.round(calculatedShade)}%`;
+
+            const radWinter = (26.79) * (Math.PI / 180);
+            const alignmentDeficit = Math.abs(radWinter - tiltRad);
+            const winterEfficiency = Math.max(0, Math.min(100, Math.cos(alignmentDeficit) * 100));
+            winterEff.innerText = `${Math.round(winterEfficiency)}%`;
+
+            // 2. Draw Ground Plane
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, yGround);
+            ctx.lineTo(w, yGround);
+            ctx.stroke();
+            ctx.fillStyle = '#334155';
+            ctx.font = '10px monospace';
+            ctx.fillText('PATIO GROUND PLANE (10 FT BELOW)', 10, yGround + 15);
+
+            // 3. Draw Louvers and Trace Rays
+            const numSlats = 5;
+            const pixelSlatWidth = slatWidth * ppi;
+            const pixelSlatSpacing = currentSlatSpacing * ppi;
+
+            // Render Sun Beam Bands behind everything
+            ctx.fillStyle = 'rgba(245, 158, 11, 0.07)';
+            ctx.strokeStyle = 'rgba(245, 158, 11, 0.2)';
+            ctx.lineWidth = 1;
+
+            for (let i = 0; i < numSlats; i++) {
+                const xSlatStart = padLeft + (i * pixelSlatSpacing);
+                
+                // Calculate end point coordinates of the tilted slat profile
+                const xSlatEnd = xSlatStart + (pixelSlatWidth * Math.cos(tiltRad));
+                const ySlatEnd = yRoof - (pixelSlatWidth * Math.sin(tiltRad));
+
+                // Project sun ray shadow limits down to patio floor
+                // Ray originating from front edge of louver
+                const distToGroundStart = yGround - yRoof;
+                const xRayStartGround = xSlatStart + (distToGroundStart / Math.tan(sunRad));
+
+                // Ray originating from back edge of louver
+                const distToGroundEnd = yGround - ySlatEnd;
+                const xRayEndGround = xSlatEnd + (distToGroundEnd / Math.tan(sunRad));
+
+                // Draw Light Pathways falling through the layout gaps
+                ctx.beginPath();
+                ctx.moveTo(xSlatStart, yRoof);
+                ctx.lineTo(xRayStartGround, yGround);
+                ctx.lineTo(xRayEndGround, yGround);
+                ctx.lineTo(xSlatEnd, ySlatEnd);
+                ctx.closePath();
+                ctx.fill();
+
+                // Highlight raw pathway vector lines
+                ctx.beginPath();
+                ctx.moveTo(xSlatStart, yRoof);
+                ctx.lineTo(xRayStartGround, yGround);
+                ctx.moveTo(xSlatEnd, ySlatEnd);
+                ctx.lineTo(xRayEndGround, yGround);
+                ctx.stroke();
+            }
+
+            // Draw Solid Slats on Top Layer
+            ctx.strokeStyle = '#f8fafc';
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            
+            for (let i = 0; i < numSlats; i++) {
+                const xSlatStart = padLeft + (i * pixelSlatSpacing);
+                const xSlatEnd = xSlatStart + (pixelSlatWidth * Math.cos(tiltRad));
+                const ySlatEnd = yRoof - (pixelSlatWidth * Math.sin(tiltRad));
+
+                ctx.beginPath();
+                ctx.moveTo(xSlatStart, yRoof);
+                ctx.lineTo(xSlatEnd, ySlatEnd);
+                ctx.stroke();
+            }
+
+            // Draw a basic structure mounting post anchor line
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(padLeft, yRoof);
+            ctx.lineTo(padLeft, yGround);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // Initialize App View State
+        setTimeout(resizeCanvas, 50);
+    </script>
+</body>
+</html>
